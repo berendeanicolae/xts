@@ -2,6 +2,15 @@
 
 NAMESPACE_BEGIN(CryptoPP)
 
+void CipherModeBase_::ResizeBuffers() {
+	m_register.New(m_cipher->BlockSize());
+}
+
+void BlockOrientedCipherModeBase_::ResizeBuffers() {
+	CipherModeBase_::ResizeBuffers();
+	m_buffer.New(BlockSize());
+}
+
 void XTS_ModeBase::Resynchronize(const byte *iv, int length) {
 	length = length == -1 ? BlockSize() : length;
 	memcpy_s(m_register, m_register.size(), iv, length);
