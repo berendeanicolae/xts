@@ -56,44 +56,34 @@ protected:
 class CRYPTOPP_DLL CRYPTOPP_NO_VTABLE BlockOrientedCipherModeBase_ : public CipherModeBase_
 {
 public:
-	void UncheckedSetKey(const byte *key, unsigned int length, const NameValuePairs &params); //TODO:
+	void UncheckedSetKey(const byte *key, unsigned int length, const NameValuePairs &params);
 	unsigned int MandatoryBlockSize() const { return BlockSize(); }
 	bool IsRandomAccess() const { return false; }
 	bool IsSelfInverting() const { return false; }
 	bool IsForwardTransformation() const { return m_cipher->IsForwardTransformation(); }
-	void Resynchronize(const byte *iv, int length = -1) { memcpy_s(m_register, m_register.size(), iv, ThrowIfInvalidIVLength(length)); } //TODO:
+	void Resynchronize(const byte *iv, int length = -1);
 
 protected:
 	bool RequireAlignedInput() const { return true; }
 	void ResizeBuffers();
 
-	SecByteBlock m_buffer;
+	AlignedSecByteBlock m_buffer;
 };
 
 
-class XTS_ModeBase {
+class XTS_ModeBase : public BlockOrientedCipherModeBase_ {
 public:
-	void UncheckedSetKey(const byte *key, unsigned int length);
-	void Resynchronize(const byte *iv, int length = -1);
-	void SetCiphers(BlockCipher &cipher, BlockCipher &cipher_iv) {
-		m_cipher = &cipher;
-		m_cipher_iv = &cipher_iv;
-		ResizeBuffers();
-	}
+	IV_Requirement IVRequirement() const { return UNPREDICTABLE_RANDOM_IV; } //TODO:
+	bool RequireAlignedInput() const { return false; }
+	static const char * CRYPTOPP_API StaticAlgorithmName() { return "XTS"; }
 protected:
-	XTS_ModeBase() : m_cipher(NULL), m_cipher_iv(NULL) {}
-	inline unsigned int BlockSize() const { assert(m_register.size() > 0); return (unsigned int)m_register.size(); }
-	void ResizeBuffers();
 	void IncrementCounter();
-
-	BlockCipher *m_cipher, *m_cipher_iv;
-	AlignedSecByteBlock m_register;
-	SecByteBlock m_buffer;
 };
 
 class XTS_Encryption : public XTS_ModeBase {
 public:
 	void ProcessData(byte *outString, const byte *inString, size_t length);
+	unsigned int MinLastBlockSize() const { return BlockSize() + 1; }
 	void ProcessLastBlock(byte *outString, const byte *inString, size_t length);
 };
 
@@ -101,15 +91,51 @@ public:
 class XTS_Decryption : public XTS_ModeBase {
 public:
 	void ProcessData(byte *outString, const byte *inString, size_t length);
+	unsigned int MinLastBlockSize() const { return BlockSize() + 1; }
 	void ProcessLastBlock(byte *outString, const byte *inString, size_t length);
 };
 
-// template <class CIPHER, class IV_CIPHER, class BASE>
+//! _
+template <class CIPHER, class CIPHER_IV, class BASE>
+class CipherModeFinalTemplate_CipherHolder_ : public AlgorithmImpl<BASE, CipherModeFinalTemplate_CipherHolder_<CIPHER, CIPHER_IV, BASE> >
+{
+protected:
+	CIPHER m_first_object;
+	CIPHER_IV m_second_object;
+public:
+	CipherModeFinalTemplate_CipherHolder_()
+	{
+		this->m_cipher = &this->m_first_object;
+		this->m_cipher_iv = &this->m_second_object;
+		this->ResizeBuffers();
+	}
+	CipherModeFinalTemplate_CipherHolder_(const byte *key, size_t length)
+	{
+		this->m_cipher = &this->m_object;
+		this->SetKey(key, length);
+	}
+	CipherModeFinalTemplate_CipherHolder_(const byte *key, size_t length, const byte *iv)
+	{
+		this->m_cipher = &this->m_object;
+		this->SetKey(key, length, MakeParameters(Name::IV(), ConstByteArrayParameter(iv, this->m_cipher->BlockSize())));
+	}
+	CipherModeFinalTemplate_CipherHolder_(const byte *key, size_t length, const byte *iv, int feedbackSize)
+	{
+		this->m_cipher = &this->m_object;
+		this->SetKey(key, length, MakeParameters(Name::IV(), ConstByteArrayParameter(iv, this->m_cipher->BlockSize()))(Name::FeedbackSize(), feedbackSize));
+	}
 
-/*template <class CIPHER, 
-struct XTS_Mode {
+	static std::string CRYPTOPP_API StaticAlgorithmName()
+	{
+		return CIPHER::StaticAlgorithmName() + "/" + BASE::StaticAlgorithmName();
+	}
+};
 
-};*/
+template <class CIPHER>
+struct XTS_Mode : public CipherModeDocumentation {
+	typedef CipherModeFinalTemplate_CipherHolder_<CPP_TYPENAME CIPHER::Encryption, CPP_TYPENAME CIPHER::Encryption, XTS_Encryption> Encryption;
+	typedef CipherModeFinalTemplate_CipherHolder_<CPP_TYPENAME CIPHER::Decryption, CPP_TYPENAME CIPHER::Encryption, XTS_Encryption> Decryption;
+};
 
 NAMESPACE_END
 
