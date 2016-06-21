@@ -11,26 +11,21 @@ void BlockOrientedCipherModeBase_::ResizeBuffers() {
 	m_buffer.New(BlockSize());
 }
 
-void XTS_ModeBase::Resynchronize(const byte *iv, int length) {
-	length = length == -1 ? BlockSize() : length;
-	memcpy_s(m_register, m_register.size(), iv, length);
+void BlockOrientedCipherModeBase_::Resynchronize(const byte *iv, int length) {
+	memcpy_s(m_register, m_register.size(), iv, ThrowIfInvalidIVLength(length));
 	m_cipher_iv->ProcessBlock(m_register);
 }
 
-void XTS_ModeBase::ResizeBuffers() {
-	m_register.New(m_cipher->BlockSize());
-}
-
-void XTS_ModeBase::UncheckedSetKey(const byte *key, unsigned int length) {
+void BlockOrientedCipherModeBase_::UncheckedSetKey(const byte *key, unsigned int length, const NameValuePairs &params) {
 	m_cipher->SetKey(key, length/2);
 	m_cipher_iv->SetKey(key+length/2, length/2);
 	ResizeBuffers();
-	// if (IsResynchronizable())
-	// {
-	// 	size_t ivLength;
-	// 	const byte *iv = GetIVAndThrowIfInvalid(params, ivLength);
-	// 	Resynchronize(iv, (int)ivLength);
-	// }
+	if (IsResynchronizable())
+	{
+		size_t ivLength;
+		const byte *iv = GetIVAndThrowIfInvalid(params, ivLength);
+		Resynchronize(iv, (int)ivLength);
+	}
 }
 
 
@@ -63,9 +58,10 @@ void XTS_Encryption::ProcessData(byte *outString, const byte *inString, size_t l
 
 	size_t blockSize = BlockSize();
 	while (length >= blockSize) {
-		xorbuf(outString, inString, m_register, blockSize);
-		m_cipher->ProcessBlock(outString);
-		xorbuf(outString, m_register, blockSize);
+		xorbuf(m_buffer, inString, m_register, blockSize);
+		m_cipher->ProcessBlock(m_buffer);
+		xorbuf(m_buffer, m_register, blockSize);
+		memcpy(outString, m_buffer, blockSize);
 
 		inString += blockSize;
 		outString += blockSize;
