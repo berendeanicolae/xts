@@ -1,3 +1,4 @@
+#include <Windows.h>
 #include "xts.h"
 
 int main()
@@ -8,20 +9,32 @@ int main()
 	memset(iv, 0x00, CryptoPP::AES::BLOCKSIZE);
 
 
-	CryptoPP::AES::Encryption aes_cipher(key, CryptoPP::AES::DEFAULT_KEYLENGTH);
-	CryptoPP::AES::Encryption aes_cipher_iv(key, CryptoPP::AES::DEFAULT_KEYLENGTH);
+	LARGE_INTEGER freq;
+	QueryPerformanceFrequency(&freq);
 
+	CryptoPP::XTS_Mode<CryptoPP::AES>::Encryption xtsE;
+	CryptoPP::XTS_Mode<CryptoPP::AES>::Decryption xtsD;
 
-	CryptoPP::XTS_Encryption xts;
+	xtsE.SetKeyWithIV(key, 2*CryptoPP::AES::DEFAULT_KEYLENGTH, iv);
+	xtsD.SetKeyWithIV(key, 2 * CryptoPP::AES::DEFAULT_KEYLENGTH, iv);
 
-	xts.SetCiphers(aes_cipher, aes_cipher_iv);
-	xts.UncheckedSetKey(key, 2*CryptoPP::AES::DEFAULT_KEYLENGTH);
-	xts.Resynchronize(iv);
+	size_t bufferSize = 0x20;
+	byte *src, *dst;
 
-	byte block[0x20] = {};
-	memset(block, 0x44, 0x20);
+	src = new byte[bufferSize]();
+	dst = new byte[bufferSize];
 
-	xts.ProcessData(block, block, 0x20);
+	DWORD start, stop;
+
+	start = GetTickCount();
+	xtsE.ProcessData(src, src, bufferSize);
+	xtsD.ProcessData(src, src, bufferSize);
+	stop = GetTickCount();
+
+	printf("%d\n", stop - start);
+
+	delete[] src;
+	delete[] dst;
 
 	return 0;
 }
